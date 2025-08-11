@@ -1,9 +1,13 @@
-import sys
+"""Streamlit interface for the TreeTask productivity app.
+
+The application lets users track tasks and subtasks and visualises their
+completion progress as a growing plant.
+"""
+
 import streamlit as st
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
-import atexit
 from contextlib import closing
 import threading
 import streamlit.components.v1 as components
@@ -12,7 +16,10 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="TaskPlantApp", layout="wide")
 
 # Database path and lock for thread-safety
-DB_PATH = Path(__file__).with_name('tasks.db')
+# Store the database in the user's configuration directory instead of the
+# package directory so installed packages remain read‑only.
+DB_PATH = Path.home() / ".treetask" / "tasks.db"
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 DB_LOCK = threading.Lock()
 
 # Database helper class
