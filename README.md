@@ -90,9 +90,19 @@ checkboxes remain independent.
 
 ## Compact interface
 
-Use **+ New task** in the top toolbar to add a task. Search filters task titles
-within the selected sidebar view. Each row has a completion checkbox, a due date,
-and edit/delete icons; expand **Subtasks** to add or manage its subtasks.
+The default view is **Ongoing**, showing all unfinished tasks regardless of date.
+Use **+ New task** in the top toolbar to add a task, with an optional description
+and comma-separated tags (for example, `work, urgent`). Repeated tags are merged
+without regard to case, preserving the first spelling and order.
+
+Search matches titles, descriptions, and tags within the selected sidebar view.
+Each row has a completion checkbox, a due date, tags when present, and edit/delete
+icons. Use the edit icon to update or clear descriptions and tags. Expand
+**Details** to read a description and manage subtasks, or **Subtasks** when there
+is no description. Descriptions and tags apply to parent tasks.
+
+Existing databases are upgraded automatically, retaining tasks and subtasks and
+starting their descriptions and tags empty.
 
 The sidebar holds a small 140-pixel plant and progress for the entire selected
 period, independent of the search text. The layout follows Idea's compact toolbar

@@ -49,12 +49,16 @@ conn = get_connection()
 #           created_date TEXT NOT NULL,
 
 with DB_LOCK, closing(conn.cursor()) as cur:
+    # Serialize schema checks and migrations across browser sessions/processes.
+    cur.execute("BEGIN IMMEDIATE")
     cur.execute(
         '''CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY,
             title TEXT NOT NULL,
             due_date TEXT NOT NULL,
-            completed INTEGER NOT NULL DEFAULT 0
+            completed INTEGER NOT NULL DEFAULT 0,
+            description TEXT NOT NULL DEFAULT '',
+            tags TEXT NOT NULL DEFAULT ''
         )''')
     cur.execute(
         '''CREATE TABLE IF NOT EXISTS subtasks (
@@ -64,14 +68,29 @@ with DB_LOCK, closing(conn.cursor()) as cur:
             completed INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
         )''')
+    columns = {row[1] for row in cur.execute("PRAGMA table_info(tasks)")}
+    for column in ("description", "tags"):
+        if column not in columns:
+            cur.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 close_connection(conn)
 
-def add_task(title, due_date):
+def normalize_tags(value):
+    tags = []
+    seen = set()
+    for tag in value.split(","):
+        tag = tag.strip()
+        if tag and tag.casefold() not in seen:
+            tags.append(tag)
+            seen.add(tag.casefold())
+    return ", ".join(tags)
+
+
+def add_task(title, due_date, description="", tags=""):
     conn = get_connection()
     with DB_LOCK, closing(conn.cursor()) as cur:
         cur.execute(
-            "INSERT INTO tasks (title, due_date) VALUES (?, ?)",
-            (title.strip(), due_date.isoformat()),
+            "INSERT INTO tasks (title, due_date, description, tags) VALUES (?, ?, ?, ?)",
+            (title.strip(), due_date.isoformat(), description.strip(), normalize_tags(tags)),
         )
     close_connection(conn)
 
@@ -81,10 +100,13 @@ def new_task_dialog():
     with st.form("new_task_dialog", clear_on_submit=True):
         title = st.text_input("Task title")
         due_date = st.date_input("Task date", date.today())
+        description = st.text_area("Description", key="new_task_description")
+        tags = st.text_input("Tags", placeholder="work, personal", key="new_task_tags",
+                             help="Separate tags with commas.")
         submitted = st.form_submit_button("Add task", key="dialog_add_task_btn")
     if submitted:
         if title.strip():
-            add_task(title, due_date)
+            add_task(title, due_date, description, tags)
             st.rerun()
         else:
             st.error("Enter task title")
@@ -103,6 +125,7 @@ with st.container(horizontal=True, vertical_alignment="center"):
 with st.sidebar:
     period = st.radio(
         "View", ("today", "week", "completed", "ongoing", "all"),
+        index=3,
         format_func=lambda value: {"today": "Today", "week": "This week",
                                   "completed": "Completed", "ongoing": "Ongoing",
                                   "all": "All tasks"}[value],
@@ -131,14 +154,16 @@ with DB_LOCK, closing(conn.cursor()) as cur:
     if period == "all":
         condition = ""
     
-    cur.execute(f"SELECT id, title, due_date, completed FROM tasks {condition}")
+    cur.execute(f"SELECT id, title, due_date, completed, description, tags FROM tasks {condition}")
     tasks = cur.fetchall()
     
 close_connection(conn)
 
 # Search within the selected view, leaving its progress calculation unchanged.
 if query.strip():
-    tasks = [task for task in tasks if query.strip().casefold() in task[1].casefold()]
+    search = query.strip().casefold()
+    tasks = [task for task in tasks
+             if any(search in field.casefold() for field in (task[1], task[4], task[5]))]
 st.caption(f"{len(tasks)} task{'s' if len(tasks) != 1 else ''}")
 if not tasks:
     st.caption("No matching tasks." if query.strip() else "No tasks here. Add a task to get started.")
@@ -161,7 +186,7 @@ if unfinished:
         st.rerun()
 
 # Iterate through tasks
-for task_id, title, due_str, completed in tasks:
+for task_id, title, due_str, completed, description, tags in tasks:
     cols = st.columns([6, 2, 0.65, 0.65], vertical_alignment="center")
     # Completion toggle
     checked = cols[0].checkbox(
@@ -180,6 +205,8 @@ for task_id, title, due_str, completed in tasks:
 
     # Title display
     cols[1].caption(date.fromisoformat(due_str).strftime("%d %b %Y"))
+    if tags:
+        cols[0].caption(tags)
 
     # Buttons and state keys
     state_key = f"edit_mode_task_{task_id}"
@@ -204,14 +231,19 @@ for task_id, title, due_str, completed in tasks:
         cols = st.columns([4, 4, 1, 1])
         new_t = cols[0].text_input("New title", value=title, key=f"new_task_title_{task_id}")
         new_d = cols[1].date_input("New date", value=date.fromisoformat(due_str), key=f"new_task_date_{task_id}")
+        new_description = st.text_area("Description", value=description,
+                                       key=f"task_description_{task_id}")
+        new_tags = st.text_input("Tags", value=tags, key=f"task_tags_{task_id}",
+                                 help="Separate tags with commas.")
         save_key = f"save_task_btn_{task_id}"
         cancel_key = f"cancel_task_btn_{task_id}"
         if cols[2].button("Save", key=save_key):
             conn = get_connection()
             with DB_LOCK, closing(conn.cursor()) as cur:
                 cur.execute(
-                    "UPDATE tasks SET title = ?, due_date = ? WHERE id = ?",
-                    (new_t.strip(), new_d.isoformat(), task_id)
+                    "UPDATE tasks SET title = ?, due_date = ?, description = ?, tags = ? WHERE id = ?",
+                    (new_t.strip(), new_d.isoformat(), new_description.strip(),
+                     normalize_tags(new_tags), task_id)
                 )
                 conn.commit()
             close_connection(conn)
@@ -231,7 +263,10 @@ for task_id, title, due_str, completed in tasks:
         subtasks = cur.fetchall()
     close_connection(conn)
 
-    with st.expander(f"Subtasks · {len(subtasks)}", expanded=False):
+    details_label = f"Details · {len(subtasks)} subtasks" if description else f"Subtasks · {len(subtasks)}"
+    with st.expander(details_label, expanded=False):
+        if description:
+            st.text(description)
         # Display each subtask
         for sub_id, sub_title, sub_completed in subtasks:
             sub_cols = st.columns([6, 2, 1, 1], vertical_alignment="center")
