@@ -115,6 +115,46 @@ class TaskActionsTest(unittest.TestCase):
         with closing(sqlite3.connect(self.home / ".treetask/tasks.db")) as conn:
             self.assertEqual(conn.execute("SELECT description, tags FROM tasks").fetchone(), ("", ""))
 
+    def test_tag_filter_matches_whole_tags_and_combines_with_search_and_view(self):
+        self.add_task("Team report", tags="Work, urgent")
+        self.add_task("Desk cleanup", tags="work")
+        self.add_task("Garden project", tags="woodwork, urgent")
+        self.assertEqual(self.app.multiselect(key="tag_filter").options,
+                         ["urgent", "woodwork", "Work"])
+        self.app.multiselect(key="tag_filter").set_value(["work"]).run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual([widget.label for widget in self.app.checkbox],
+                         ["Team report", "Desk cleanup"])
+        self.app.multiselect(key="tag_filter").set_value(["work", "urgent"]).run()
+        self.assertEqual([widget.label for widget in self.app.checkbox], ["Team report"])
+        self.app.text_input(key="task_search").set_value("cleanup").run()
+        self.assertFalse(self.app.checkbox)
+        self.app.text_input(key="task_search").set_value("").run()
+        self.app.button(key="finish_task_btn").click().run()
+        self.assertFalse(self.app.checkbox)
+        self.app.radio(key="period_select").set_value("completed").run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual(self.app.multiselect(key="tag_filter").value, ["work", "urgent"])
+        self.assertEqual([widget.label for widget in self.app.checkbox], ["Team report"])
+        self.app.radio(key="period_select").set_value("all").run()
+        self.app.multiselect(key="tag_filter").set_value([]).run()
+        self.assertEqual(len(self.app.checkbox), 3)
+
+    def test_tag_filter_cleans_up_removed_tags(self):
+        self.assertFalse(self.app.multiselect)
+        self.add_task("First", tags="work")
+        self.add_task("Second", tags="home")
+        self.app.multiselect(key="tag_filter").set_value(["work"]).run()
+        self.app.button(key="del_task_btn_1").click().run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual(self.app.multiselect(key="tag_filter").value, [])
+        self.assertEqual([widget.label for widget in self.app.checkbox], ["Second"])
+        self.app.button(key="edit_task_btn_2").click().run()
+        self.app.text_input(key="task_tags_2").set_value("")
+        self.app.button(key="save_task_btn_2").click().run()
+        self.assertFalse(self.app.exception)
+        self.assertFalse(self.app.multiselect)
+
     def test_migrates_existing_database_without_losing_tasks_or_subtasks(self):
         database = self.home / ".treetask/tasks.db"
         with closing(sqlite3.connect(database)) as conn:

@@ -100,6 +100,12 @@ and comma-separated tags (for example, `work, urgent`). Repeated tags are merged
 without regard to case, preserving the first spelling and order.
 
 Search matches titles, descriptions, and tags within the selected sidebar view.
+Use the sidebar's **Tags** filter to select exact tags; multiple selections must
+all be present on a task. Tag matching ignores case and combines with the view
+and text search. Clear the selection to show all tags. Available tags come from
+all tasks, so switching views preserves your selection. The filter is hidden
+when no tasks have tags.
+
 Each row has a completion checkbox, a due date, tags when present, and edit/delete
 icons. Use the edit icon to update or clear descriptions and tags. Expand
 **Details** to read a description and manage subtasks, or **Subtasks** when there

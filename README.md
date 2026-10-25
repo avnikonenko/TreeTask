@@ -19,7 +19,8 @@ For a Linux application-menu launcher, run `python3 scripts/install-desktop.py`.
 Optional GNOME panel and global-shortcut setup is covered in the guide.
 
 Start in **Ongoing**, add tasks with **Alt+Shift+N**, and search titles,
-descriptions, or tags. Expand **Details** for descriptions and subtasks.
+descriptions, or tags. Use the sidebar's **Tags** filter for exact tag matches.
+Expand **Details** for descriptions and subtasks.
 
 See the [user guide](docs/user-guide.md) for desktop setup, all shortcuts,
 updates, data locations, and development checks. The screenshot uses sample data.

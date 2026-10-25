@@ -117,7 +117,7 @@ def new_task_dialog():
 with st.container(horizontal=True, vertical_alignment="center"):
     st.markdown("**TreeTask**", width="content")
     query = st.text_input(
-        "Search tasks", placeholder="Search tasks…", label_visibility="collapsed",
+        "Search tasks", placeholder="Search tasks or tags…", label_visibility="collapsed",
         key="task_search",
     )
     if st.button("+ New task", key="new_task_dialog_btn", shortcut="Alt+Shift+N"):
@@ -132,6 +132,7 @@ with st.sidebar:
                                   "all": "All tasks"}[value],
         key="period_select", label_visibility="collapsed",
     )
+    tag_filters = st.container()
     plant = st.container()
 
 # Fetch tasks for period
@@ -157,8 +158,32 @@ with DB_LOCK, closing(conn.cursor()) as cur:
     
     cur.execute(f"SELECT id, title, due_date, completed, description, tags FROM tasks {condition}")
     tasks = cur.fetchall()
+    cur.execute("SELECT tags FROM tasks WHERE tags <> '' ORDER BY id")
+    tag_names = {}
+    for (stored_tags,) in cur:
+        for tag in stored_tags.split(","):
+            tag = tag.strip()
+            if tag:
+                tag_names.setdefault(tag.casefold(), tag)
     
 close_connection(conn)
+
+selected_tags = []
+if tag_names:
+    # Drop selections whose tags were removed by editing/deleting tasks.
+    if "tag_filter" in st.session_state:
+        valid_tags = [tag for tag in st.session_state["tag_filter"] if tag in tag_names]
+        if valid_tags != st.session_state["tag_filter"]:
+            st.session_state["tag_filter"] = valid_tags
+    selected_tags = tag_filters.multiselect(
+        "Tags", sorted(tag_names), format_func=tag_names.__getitem__, key="tag_filter",
+        placeholder="All tags", help="Show tasks containing all selected tags.",
+    )
+    if selected_tags:
+        required_tags = set(selected_tags)
+        tasks = [task for task in tasks if required_tags.issubset(
+            {tag.strip().casefold() for tag in task[5].split(",") if tag.strip()}
+        )]
 
 # Search within the selected view, leaving its progress calculation unchanged.
 if query.strip():
@@ -167,7 +192,7 @@ if query.strip():
              if any(search in field.casefold() for field in (task[1], task[4], task[5]))]
 st.caption(f"{len(tasks)} task{'s' if len(tasks) != 1 else ''}")
 if not tasks:
-    st.caption("No matching tasks." if query.strip() else "No tasks here. Add a task to get started.")
+    st.caption("No matching tasks." if query.strip() or selected_tags else "No tasks here. Add a task to get started.")
 
 unfinished = {task[0]: task[1] for task in tasks if not task[3]}
 if unfinished:
