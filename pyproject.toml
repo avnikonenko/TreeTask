@@ -10,13 +10,13 @@ readme = "README.md"
 license = {file = "LICENSE"}
 authors = [{name = "TreeTask Contributors"}]
 keywords = ["streamlit", "tasks", "productivity", "todo", "plant"]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
-    "streamlit"
+    "streamlit>=1.52"
 ]
 
 [project.scripts]
 treetask = "treetask.__main__:main"
 
 [tool.setuptools.package-data]
-treetask = ["plant_stage*.png"]
+treetask = ["plant_stage*.png", "icon.svg"]

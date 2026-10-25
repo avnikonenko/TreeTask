@@ -10,10 +10,22 @@ from datetime import date, timedelta
 from pathlib import Path
 from contextlib import closing
 import threading
-import streamlit.components.v1 as components
 
 # Page config for wide layout
-st.set_page_config(page_title="TaskPlantApp", layout="wide")
+st.set_page_config(
+    page_title="TreeTask", page_icon=str(Path(__file__).with_name("icon.svg")),
+    layout="wide",
+)
+
+st.markdown("""
+<style>
+    .stMainBlockContainer { max-width: 1100px; padding-top: 4rem; padding-bottom: 2rem; }
+    [data-testid="stSidebar"] { min-width: 240px; max-width: 240px; }
+    [data-testid="stVerticalBlock"] { gap: 0.6rem; }
+    [data-testid="stSidebar"] [data-testid="stImage"] { margin: 0 auto; }
+    [data-testid="stCaptionContainer"] p { font-size: 0.8rem; }
+</style>
+""", unsafe_allow_html=True)
 
 # Database path and lock for thread-safety
 # Store the database in the user's configuration directory instead of the
@@ -54,33 +66,49 @@ with DB_LOCK, closing(conn.cursor()) as cur:
         )''')
 close_connection(conn)
 
-# Sidebar: Exit and Add Task
-def exit_app():
-    # Close tab
-    components.html("<script>window.close();</script>", height=0)
-    st.stop()
+def add_task(title, due_date):
+    conn = get_connection()
+    with DB_LOCK, closing(conn.cursor()) as cur:
+        cur.execute(
+            "INSERT INTO tasks (title, due_date) VALUES (?, ?)",
+            (title.strip(), due_date.isoformat()),
+        )
+    close_connection(conn)
 
-with st.sidebar:
-    if st.button("Exit", key="exit_btn", on_click=exit_app):
-        pass
-    st.title("Task Period")
-    period = st.selectbox("Select period", ("today", "week", "completed", "ongoing", "all"), key="period_select")
-    st.title("Add Task")
-    new_title = st.text_input("Task Title", key="new_task_title")
-    new_date = st.date_input("Task Date", date.today(), key="new_task_date")
-    if st.button("Add Task", key="add_task_btn"):
-        if new_title.strip():
-            conn = get_connection()
-            with DB_LOCK, closing(conn.cursor()) as cur:
-                cur.execute(
-                    "INSERT INTO tasks (title, due_date) VALUES (?, ?)",
-                    (new_title.strip(), new_date.isoformat())
-                )
-                conn.commit()
-            close_connection(conn)
+
+@st.dialog("New task")
+def new_task_dialog():
+    with st.form("new_task_dialog", clear_on_submit=True):
+        title = st.text_input("Task title")
+        due_date = st.date_input("Task date", date.today())
+        submitted = st.form_submit_button("Add task", key="dialog_add_task_btn")
+    if submitted:
+        if title.strip():
+            add_task(title, due_date)
             st.rerun()
         else:
             st.error("Enter task title")
+
+
+# Compact toolbar and view navigation.
+with st.container(horizontal=True, vertical_alignment="center"):
+    st.markdown("**TreeTask**", width="content")
+    query = st.text_input(
+        "Search tasks", placeholder="Search tasks…", label_visibility="collapsed",
+        key="task_search",
+    )
+    if st.button("+ New task", key="new_task_dialog_btn", shortcut="Alt+Shift+N"):
+        new_task_dialog()
+
+with st.sidebar:
+    period = st.radio(
+        "View", ("today", "week", "completed", "ongoing", "all"),
+        format_func=lambda value: {"today": "Today", "week": "This week",
+                                  "completed": "Completed", "ongoing": "Ongoing",
+                                  "all": "All tasks"}[value],
+        key="period_select", label_visibility="collapsed",
+    )
+    plant = st.container()
 
 # Fetch tasks for period
 today = date.today()
@@ -108,15 +136,36 @@ with DB_LOCK, closing(conn.cursor()) as cur:
     
 close_connection(conn)
 
-# Display header
-st.header(f"Tasks for the {period}")
+# Search within the selected view, leaving its progress calculation unchanged.
+if query.strip():
+    tasks = [task for task in tasks if query.strip().casefold() in task[1].casefold()]
+st.caption(f"{len(tasks)} task{'s' if len(tasks) != 1 else ''}")
+if not tasks:
+    st.caption("No matching tasks." if query.strip() else "No tasks here. Add a task to get started.")
+
+unfinished = {task[0]: task[1] for task in tasks if not task[3]}
+if unfinished:
+    keyboard_actions = st.sidebar.expander("Keyboard actions")
+    selected_task = keyboard_actions.selectbox(
+        "Task to finish", list(unfinished),
+        format_func=lambda task_id: f"{unfinished[task_id]} (#{task_id})",
+        key="task_to_finish",
+    )
+    if keyboard_actions.button("Finish selected task", key="finish_task_btn", shortcut="Alt+Shift+D"):
+        conn = get_connection()
+        with DB_LOCK, closing(conn.cursor()) as cur:
+            cur.execute("UPDATE tasks SET completed = 1 WHERE id = ?", (selected_task,))
+        close_connection(conn)
+        # Keep the existing checkbox from restoring its stale unchecked value.
+        st.session_state.pop(f"task_cb_{selected_task}", None)
+        st.rerun()
 
 # Iterate through tasks
 for task_id, title, due_str, completed in tasks:
-    cols = st.columns([1, 5, 1, 1])
+    cols = st.columns([6, 2, 0.65, 0.65], vertical_alignment="center")
     # Completion toggle
     checked = cols[0].checkbox(
-        "Done", value=bool(completed), key=f"task_cb_{task_id}", label_visibility="hidden"
+        title, value=bool(completed), key=f"task_cb_{task_id}"
     )
     if checked != bool(completed):
         conn = get_connection()
@@ -130,7 +179,7 @@ for task_id, title, due_str, completed in tasks:
         st.rerun()
 
     # Title display
-    cols[1].markdown(f"**{title}** (created {due_str})", unsafe_allow_html=True)
+    cols[1].caption(date.fromisoformat(due_str).strftime("%d %b %Y"))
 
     # Buttons and state keys
     state_key = f"edit_mode_task_{task_id}"
@@ -138,11 +187,11 @@ for task_id, title, due_str, completed in tasks:
     del_key = f"del_task_btn_{task_id}"
 
     # Edit button
-    if cols[2].button("Edit", key=btn_key):
+    if cols[2].button("", icon=":material/edit:", help="Edit task", key=btn_key):
         st.session_state[state_key] = True
         st.rerun()
     # Delete button
-    if cols[3].button("Delete", key=del_key):
+    if cols[3].button("", icon=":material/delete:", help="Delete task", key=del_key):
         conn = get_connection()
         with DB_LOCK, closing(conn.cursor()) as cur:
             cur.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
@@ -152,7 +201,8 @@ for task_id, title, due_str, completed in tasks:
 
     # Edit form
     if st.session_state.get(state_key, False):
-        new_t = cols[1].text_input("New title", value=title, key=f"new_task_title_{task_id}")
+        cols = st.columns([4, 4, 1, 1])
+        new_t = cols[0].text_input("New title", value=title, key=f"new_task_title_{task_id}")
         new_d = cols[1].date_input("New date", value=date.fromisoformat(due_str), key=f"new_task_date_{task_id}")
         save_key = f"save_task_btn_{task_id}"
         cancel_key = f"cancel_task_btn_{task_id}"
@@ -171,12 +221,6 @@ for task_id, title, due_str, completed in tasks:
             del st.session_state[state_key]
             st.rerun()
 
-    # Subtasks header
-    cols[1].markdown(
-        f"<div style='margin-left:6rem; color: blue;'><u>Subtasks:</u></div>",
-        unsafe_allow_html=True
-    )
-
     # Fetch subtasks
     conn = get_connection()
     with DB_LOCK, closing(conn.cursor()) as cur:
@@ -187,66 +231,63 @@ for task_id, title, due_str, completed in tasks:
         subtasks = cur.fetchall()
     close_connection(conn)
 
-    # Display each subtask
-    for sub_id, sub_title, sub_completed in subtasks:
-        sub_cols = st.columns([1.5, 4, 1, 1])
-        sc_key = f"sub_cb_{task_id}_{sub_id}"
-        sc = sub_cols[0].checkbox(
-            "Done", value=bool(sub_completed), key=sc_key, label_visibility="hidden"
-        )
-        if sc != bool(sub_completed):
-            conn = get_connection()
-            with DB_LOCK, closing(conn.cursor()) as cur:
-                cur.execute(
-                    "UPDATE subtasks SET completed = ? WHERE id = ?",
-                    (1 if sc else 0, sub_id)
-                )
-                conn.commit()
-            close_connection(conn)
-            st.rerun()
-
-        sub_cols[1].markdown(
-            f"<div style='text-align:left; color:darkblue; padding-left:10px;'>&bull; {sub_title}</div>",
-            unsafe_allow_html=True
-        )
-        # Subtask edit
-        sub_state = f"edit_mode_sub_{task_id}_{sub_id}"
-        sub_btn = f"edit_sub_btn_{task_id}_{sub_id}"
-        del_sub_btn = f"del_sub_btn_{task_id}_{sub_id}"
-        if sub_cols[2].button("Edit", key=sub_btn):
-            st.session_state[sub_state] = True
-            st.rerun()
-        if st.session_state.get(sub_state, False):
-            new_st = sub_cols[1].text_input(
-                "New subtask title", value=sub_title, key=f"new_subtitle_{task_id}_{sub_id}"
+    with st.expander(f"Subtasks · {len(subtasks)}", expanded=False):
+        # Display each subtask
+        for sub_id, sub_title, sub_completed in subtasks:
+            sub_cols = st.columns([6, 2, 1, 1], vertical_alignment="center")
+            sc_key = f"sub_cb_{task_id}_{sub_id}"
+            sc = sub_cols[0].checkbox(
+                sub_title, value=bool(sub_completed), key=sc_key
             )
-            save_sub = f"save_sub_btn_{task_id}_{sub_id}"
-            cancel_sub = f"cancel_sub_btn_{task_id}_{sub_id}"
-            if sub_cols[2].button("Save", key=save_sub):
+            if sc != bool(sub_completed):
                 conn = get_connection()
                 with DB_LOCK, closing(conn.cursor()) as cur:
                     cur.execute(
-                        "UPDATE subtasks SET title = ? WHERE id = ?",
-                        (new_st.strip(), sub_id)
+                        "UPDATE subtasks SET completed = ? WHERE id = ?",
+                        (1 if sc else 0, sub_id)
                     )
-                    conn.commit()
-                close_connection(conn)
-                del st.session_state[sub_state]
-                st.rerun()
-            if sub_cols[3].button("Cancel", key=cancel_sub):
-                del st.session_state[sub_state]
-                st.rerun()
-        else:
-            if sub_cols[3].button("Delete", key=del_sub_btn):
-                conn = get_connection()
-                with DB_LOCK, closing(conn.cursor()) as cur:
-                    cur.execute("DELETE FROM subtasks WHERE id = ?", (sub_id,))
                     conn.commit()
                 close_connection(conn)
                 st.rerun()
 
-    # Add Subtask Form
-    with st.expander("Add Subtask", expanded=False):
+            # Subtask edit
+            sub_state = f"edit_mode_sub_{task_id}_{sub_id}"
+            sub_btn = f"edit_sub_btn_{task_id}_{sub_id}"
+            del_sub_btn = f"del_sub_btn_{task_id}_{sub_id}"
+            if sub_cols[2].button("Edit", key=sub_btn):
+                st.session_state[sub_state] = True
+                st.rerun()
+            if st.session_state.get(sub_state, False):
+                sub_cols = st.columns([1, 6, 1, 1])
+                new_st = sub_cols[1].text_input(
+                    "New subtask title", value=sub_title, key=f"new_subtitle_{task_id}_{sub_id}"
+                )
+                save_sub = f"save_sub_btn_{task_id}_{sub_id}"
+                cancel_sub = f"cancel_sub_btn_{task_id}_{sub_id}"
+                if sub_cols[2].button("Save", key=save_sub):
+                    conn = get_connection()
+                    with DB_LOCK, closing(conn.cursor()) as cur:
+                        cur.execute(
+                            "UPDATE subtasks SET title = ? WHERE id = ?",
+                            (new_st.strip(), sub_id)
+                        )
+                        conn.commit()
+                    close_connection(conn)
+                    del st.session_state[sub_state]
+                    st.rerun()
+                if sub_cols[3].button("Cancel", key=cancel_sub):
+                    del st.session_state[sub_state]
+                    st.rerun()
+            else:
+                if sub_cols[3].button("Delete", key=del_sub_btn):
+                    conn = get_connection()
+                    with DB_LOCK, closing(conn.cursor()) as cur:
+                        cur.execute("DELETE FROM subtasks WHERE id = ?", (sub_id,))
+                        conn.commit()
+                    close_connection(conn)
+                    st.rerun()
+
+        # Add Subtask Form
         form = st.form(key=f"add_sub_form_{task_id}")
         new_sub = form.text_input("Subtask Title", key=f"new_sub_{task_id}")
         if form.form_submit_button("Add Subtask"):
@@ -279,27 +320,9 @@ with DB_LOCK, closing(conn.cursor()) as cur:
 close_connection(conn)
 
 progress_pct = int((completed_tasks / (total_tasks or 1)) * 100)
-st.write(f"**Task Progress:** {progress_pct}% ({completed_tasks}/{total_tasks})")
-
-# SVG plant based on progress
-
-# SVG stages
 stage = min(progress_pct // 20, 5)
 img_path = Path(__file__).parent / f"plant_stage{stage}.png"
-
-# display the PNG
-st.image(
-    str(img_path),
-    use_container_width=True,
-    #use_column_width=True,  # auto‐scale to container width
-    caption=f"Plant at {progress_pct}%"
-)
-#svg_path = Path(__file__).parent / f"plant_stage{stage}.png"
-#svg_content = svg_path.read_text()
-#svg_html = f"""
-#<div style="text-align: center; margin-top: 2rem; max-width: 600px; margin-left: auto; margin-right: auto; overflow: auto;">
-#  {svg_content}
-#</div>
-#"""
-#st.markdown(svg_html, unsafe_allow_html=True)
-
+with plant:
+    st.image(str(img_path), width=140)
+    st.progress(progress_pct / 100)
+    st.caption(f"{completed_tasks} of {total_tasks} complete · {progress_pct}%")
