@@ -24,6 +24,7 @@ st.markdown("""
     [data-testid="stVerticalBlock"] { gap: 0.6rem; }
     [data-testid="stSidebar"] [data-testid="stImage"] { margin: 0 auto; }
     [data-testid="stCaptionContainer"] p { font-size: 0.8rem; }
+    .st-key-finish_task_btn [aria-label^="Shortcut "] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -176,7 +177,10 @@ if unfinished:
         format_func=lambda task_id: f"{unfinished[task_id]} (#{task_id})",
         key="task_to_finish",
     )
-    if keyboard_actions.button("Finish selected task", key="finish_task_btn", shortcut="Alt+Shift+D"):
+    if keyboard_actions.button(
+        "Finish selected task", key="finish_task_btn", shortcut="Alt+Shift+D",
+        width="stretch", help="Finish selected task (Alt+Shift+D)",
+    ):
         conn = get_connection()
         with DB_LOCK, closing(conn.cursor()) as cur:
             cur.execute("UPDATE tasks SET completed = 1 WHERE id = ?", (selected_task,))
