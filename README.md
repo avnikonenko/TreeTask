@@ -12,6 +12,44 @@ From a local clone of the repository:
 pip install .
 ```
 
+On Linux, install an isolated copy and an application-menu launcher with a plant
+icon for the current user:
+
+```bash
+python3 scripts/install-desktop.py
+```
+
+Run the same command after updating the checkout to update the installed copy.
+Search for **TreeTask**, **task**, or **todo** in your application menu. The
+launcher opens the app in your default browser and reuses its background server;
+TreeTask also supplies the browser-tab icon. Browser window decorations
+are controlled by your browser and desktop environment.
+
+The installation lives in `~/.local/share/treetask/venv`, with its launcher at
+`~/.local/share/applications/treetask.desktop`. Task data remains in
+`~/.treetask/tasks.db` across installations and updates.
+
+### GNOME top bar and global shortcut
+
+After installing, enable the plant icon in the top bar and **Super+Shift+T**
+(Super is the Windows key) to open TreeTask from any application:
+
+```bash
+/usr/bin/python3 scripts/setup-panel.py
+```
+
+This uses the existing system GTK 3 / Ayatana AppIndicator bindings, GNOME's
+AppIndicator extension, and the `desktop-keybindings` command. It does not install
+these system components. Setup refuses to overwrite an unrelated custom shortcut.
+Click the plant icon and choose **Open TreeTask**. The icon starts automatically
+at login; **Hide icon** hides it for the current session. Remove
+`~/.config/autostart/treetask.desktop` to disable its login startup.
+
+The desktop helper serves TreeTask only on `127.0.0.1:8517`. Repeated launches
+reuse that server and open the page in your browser; your browser determines
+whether the page opens in a new tab. Startup logs are in
+`~/.local/share/treetask/server.log` and `tray.log` in the same directory.
+
 ## Usage
 
 After installation you can launch the application with:
@@ -19,6 +57,9 @@ After installation you can launch the application with:
 ```bash
 treetask
 ```
+
+For the isolated Linux desktop installation, launch from the application menu or
+run `~/.local/share/treetask/venv/bin/treetask`.
 
 Alternatively use the module or Streamlit directly:
 
@@ -29,7 +70,11 @@ streamlit run treetask/app.py
 
 ## Keyboard shortcuts
 
-These shortcuts work while the TreeTask browser page has focus:
+Open the plant icon's **Keyboard shortcuts** submenu to see the full key list.
+
+The desktop shortcut **Super+Shift+T** opens TreeTask even when another app has
+focus, after running the GNOME setup above. These task shortcuts work while the
+TreeTask browser page has focus:
 
 | Shortcut | Action |
 | --- | --- |
