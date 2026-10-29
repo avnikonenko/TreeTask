@@ -21,6 +21,12 @@ def setup():
          "--binding", "<Super><Shift>t"],
         check=True,
     )
+    subprocess.run(
+        [keybindings, "--backend", "gnome", "add", "--name", "TreeTask — Quick add",
+         "--command", shlex.join([str(python), "-m", "treetask", "--capture"]),
+         "--binding", "<Control><Alt><Shift>n"],
+        check=True,
+    )
     autostart = home / ".config/autostart/treetask.desktop"
     autostart.parent.mkdir(parents=True, exist_ok=True)
     entry = (home / ".local/share/applications/treetask.desktop").read_text(encoding="utf-8")
@@ -33,7 +39,8 @@ def setup():
             [str(python), "-m", "treetask", "--tray"],
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
         )
-    print("TreeTask panel icon enabled now and at login. Global shortcut: Super+Shift+T")
+    print("TreeTask panel icon enabled now and at login.")
+    print("Global shortcuts: Super+Shift+T opens TreeTask; Ctrl+Alt+Shift+N quick-adds a task.")
 
 
 if __name__ == "__main__":

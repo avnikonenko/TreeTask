@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
@@ -127,6 +127,41 @@ class NativeWindowTest(unittest.TestCase):
             self.window.delete_selected()
         self.assertEqual(self.titles(), [])
         self.assertEqual(self.repo.subtasks(), {})
+
+    def test_ctrl_w_closes_main_window_to_tray(self):
+        self.window.tray = object()
+        self.window.show()
+        self.window.activateWindow()
+        self.app.processEvents()
+        with patch("treetask.ui.QSystemTrayIcon.isSystemTrayAvailable", return_value=True):
+            QTest.keyClick(self.window.search, Qt.Key.Key_W, Qt.KeyboardModifier.ControlModifier)
+            self.app.processEvents()
+        self.assertFalse(self.window.isVisible())
+        self.assertFalse(self.window.quitting)
+        self.assertEqual(self.repo.tasks(), [])
+
+    def test_quick_add_reuses_dialog_and_ctrl_w_cancels(self):
+        observed = {}
+        def interact():
+            dialog = self.window.task_dialog
+            try:
+                dialog.title.setText("Unfinished draft")
+                self.window.new_task()
+                observed["same"] = self.window.task_dialog is dialog
+                observed["title"] = dialog.title.text()
+                observed["main_hidden"] = not self.window.isVisible()
+                dialog.activateWindow()
+                self.app.processEvents()
+                QTest.keyClick(dialog.title, Qt.Key.Key_W, Qt.KeyboardModifier.ControlModifier)
+                observed["closed"] = not dialog.isVisible()
+            finally:
+                dialog.reject()
+        QTimer.singleShot(0, interact)
+        self.window.new_task()
+        self.assertEqual(observed, {"same": True, "title": "Unfinished draft",
+                                    "main_hidden": True, "closed": True})
+        self.assertIsNone(self.window.task_dialog)
+        self.assertEqual(self.repo.tasks(), [])
 
 
 if __name__ == "__main__":

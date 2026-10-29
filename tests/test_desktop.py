@@ -44,6 +44,62 @@ sys.exit(result)
         self.assertEqual(endpoint("tasks.db"), endpoint(Path.cwd() / "tasks.db"))
         self.assertNotEqual(endpoint("tasks.db"), endpoint("other.db"))
 
+    def test_cold_capture_shows_only_dialog_and_exits_without_tray(self):
+        with tempfile.TemporaryDirectory() as directory:
+            code = """import sys
+from PySide6.QtCore import QCoreApplication, QTimer
+from treetask import app
+OriginalWindow = app.MainWindow
+class AutoCaptureWindow(OriginalWindow):
+    def __init__(self, repo):
+        super().__init__(repo)
+        QTimer.singleShot(100, self.inspect)
+        QTimer.singleShot(2000, lambda: QCoreApplication.exit(8))
+    def inspect(self):
+        if self.isVisible() or self.task_dialog is None:
+            QCoreApplication.exit(9)
+            return
+        self.task_dialog.title.setText('Quick task')
+        self.task_dialog.save()
+app.MainWindow = AutoCaptureWindow
+result = app.main(['--database', sys.argv[1], '--capture'])
+sys.exit(result)
+"""
+            database = Path(directory) / "tasks.db"
+            result = subprocess.run([sys.executable, "-c", code, str(database)],
+                                    capture_output=True, text=True, timeout=8)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            repo = Repository(database)
+            try:
+                self.assertEqual([row["title"] for row in repo.tasks()], ["Quick task"])
+            finally:
+                repo.close()
+
+    def test_setup_registers_both_global_shortcuts_without_force(self):
+        script = Path(__file__).resolve().parents[1] / "scripts/setup-panel.py"
+        spec = importlib.util.spec_from_file_location("setup_panel", script)
+        setup_panel = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(setup_panel)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            python = home / ".local/share/treetask/venv/bin/python"
+            python.parent.mkdir(parents=True)
+            python.touch()
+            entry = home / ".local/share/applications/treetask.desktop"
+            entry.parent.mkdir(parents=True)
+            entry.write_text('[Desktop Entry]\nExec="python" -m treetask\n')
+            with patch.object(Path, "home", return_value=home), \
+                 patch.object(setup_panel.shutil, "which", return_value="desktop-keybindings"), \
+                 patch.object(setup_panel.subprocess, "run") as register, \
+                 patch.object(setup_panel.subprocess, "Popen"):
+                setup_panel.setup()
+            commands = [call.args[0] for call in register.call_args_list]
+            self.assertEqual(len(commands), 2)
+            self.assertIn("<Super><Shift>t", commands[0])
+            self.assertIn("<Control><Alt><Shift>n", commands[1])
+            self.assertIn("--capture", commands[1][commands[1].index("--command") + 1])
+            self.assertFalse(any("--force" in command for command in commands))
+
     def test_second_process_requests_existing_window(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "tasks.db"

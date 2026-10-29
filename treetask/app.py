@@ -50,12 +50,16 @@ def main(argv=None):
             window.tray = Tray(window)
         tray_available = window.tray is not None and QSystemTrayIcon.isSystemTrayAvailable()
         app.setQuitOnLastWindowClosed(not tray_available)
-        if not args.tray or not tray_available:
+        if not args.capture and (not args.tray or not tray_available):
             window.show()
         if args.tray and not tray_available:
             window.statusBar().showMessage("Panel unavailable — TreeTask is open in this window.")
         if args.capture:
-            QTimer.singleShot(0, window.new_task)
+            def capture():
+                window.new_task()
+                if not tray_available and not window.isVisible():
+                    app.quit()
+            QTimer.singleShot(0, capture)
         try:
             return app.exec()
         finally:

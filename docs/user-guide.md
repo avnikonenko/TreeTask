@@ -83,10 +83,16 @@ This uses the installed `desktop-keybindings` command and GNOME's panel indicato
 support; it does not install system components. Setup refuses to overwrite an
 unrelated custom shortcut. **Super+Shift+T** opens TreeTask from any application,
 reusing the running window. Super is the Windows key.
+**Ctrl+Alt+Shift+N** opens quick-add from any application. It shows only the task
+dialog when TreeTask is hidden or not yet running. Repeating the shortcut focuses
+the existing new-task dialog without discarding its contents. Idea's Ctrl+Alt+N
+and the terminal's Ctrl+Alt+T remain unchanged.
 
 The panel menu offers **Open TreeTask**, **+ New task**, **Keyboard shortcuts**,
 and **Quit TreeTask**. Closing the window leaves the app in the panel when tray
 support is available. Quit from **⋯ → Quit TreeTask** or the panel menu to exit.
+**Ctrl+W** closes the main window, retaining its panel icon when available. In a
+task dialog, Ctrl+W cancels that dialog, like Escape.
 Without tray support, closing the window exits. Login startup uses
 `~/.config/autostart/treetask.desktop`; remove it to disable startup.
 
@@ -107,7 +113,9 @@ socket, without an HTTP port. The installed package lives in
 | Shortcut | Action |
 | --- | --- |
 | Super+Shift+T | Open TreeTask from any app after GNOME setup. |
+| Ctrl+Alt+Shift+N | Quick-add a task from any app after GNOME setup. |
 | Ctrl+N / Alt+Shift+N | New task. |
+| Ctrl+W | Close the window, or cancel the task dialog. |
 | Alt+Shift+D | Finish the selected task or subtask. |
 | Space | Toggle the selected checkbox. |
 | Ctrl+F | Focus search. |

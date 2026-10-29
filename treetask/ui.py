@@ -18,7 +18,9 @@ from .repository import VIEWS
 
 SHORTCUTS = (
     ("Super+Shift+T", "Open TreeTask from any app (after GNOME setup)"),
+    ("Ctrl+Alt+Shift+N", "Quick-add a task from any app (after GNOME setup)"),
     ("Ctrl+N / Alt+Shift+N", "New task"),
+    ("Ctrl+W", "Close the window; keep running in the panel when available"),
     ("Alt+Shift+D", "Finish selected task or subtask"),
     ("Ctrl+F", "Search tasks"),
     ("Ctrl+Enter", "Save the task dialog"),
@@ -82,6 +84,8 @@ class TaskDialog(QDialog):
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        close = QShortcut(QKeySequence("Ctrl+W"), self)
+        close.activated.connect(self.reject)
         for key in ("Ctrl+Return", "Ctrl+Enter"):
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(self.save)
@@ -105,6 +109,7 @@ class MainWindow(QMainWindow):
         self.repo = repo
         self.tray = None
         self.quitting = False
+        self.task_dialog = None
         self.setWindowTitle("TreeTask")
         self.resize(940, 580)
         self.setMinimumSize(650, 420)
@@ -209,6 +214,7 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
         self.statusBar().showMessage("Double-click to edit · Right-click for task actions")
         for keys, callback in (("Alt+Shift+N", self.new_task), ("Ctrl+N", self.new_task),
+                               ("Ctrl+W", self.close),
                                ("Alt+Shift+D", self.finish_selected), ("Ctrl+F", self.search.setFocus)):
             action = QAction(self)
             action.setShortcut(QKeySequence(keys))
@@ -318,9 +324,19 @@ class MainWindow(QMainWindow):
             self.change(lambda: self.repo.complete(selected[0], selected[1], True))
 
     def new_task(self, *_):
+        if self.task_dialog is not None:
+            self.task_dialog.showNormal()
+            self.task_dialog.raise_()
+            self.task_dialog.activateWindow()
+            return
         dialog = TaskDialog(self.repo, parent=self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.refresh()
+        self.task_dialog = dialog
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.refresh()
+        finally:
+            self.task_dialog = None
+            dialog.deleteLater()
 
     def edit_selected(self, *_):
         selected = self.selection()
