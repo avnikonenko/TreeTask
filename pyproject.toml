@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "treetask"
 version = "0.1.0"
-description = "Streamlit-based task manager that grows a plant as you complete tasks."
+description = "Native desktop task manager that grows a plant as you complete tasks."
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [{name = "TreeTask Contributors"}]
-keywords = ["streamlit", "tasks", "productivity", "todo", "plant"]
+keywords = ["tasks", "productivity", "todo", "plant"]
 requires-python = ">=3.10"
 dependencies = [
-    "streamlit>=1.52"
+    "PySide6>=6.7,<7"
 ]
 
 [project.scripts]

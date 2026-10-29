@@ -7,21 +7,17 @@ import subprocess
 
 
 def setup():
-    import gi
-    gi.require_version("Gtk", "3.0")
-    gi.require_version("AyatanaAppIndicator3", "0.1")
-
     home = Path.home()
     install = home / ".local/share/treetask"
-    helper = install / "desktop.py"
-    if not helper.is_file():
+    python = install / "venv/bin/python"
+    if not python.is_file():
         raise RuntimeError("Run scripts/install-desktop.py first.")
     keybindings = shutil.which("desktop-keybindings")
     if keybindings is None:
         raise RuntimeError("desktop-keybindings is required to register the global shortcut.")
     subprocess.run(
         [keybindings, "--backend", "gnome", "add", "--name", "Open TreeTask",
-         "--command", shlex.join(["/usr/bin/python3", str(helper)]),
+         "--command", shlex.join([str(python), "-m", "treetask"]),
          "--binding", "<Super><Shift>t"],
         check=True,
     )
@@ -34,7 +30,7 @@ def setup():
     autostart.write_text(entry, encoding="utf-8")
     with (install / "tray.log").open("a") as log:
         subprocess.Popen(
-            ["/usr/bin/python3", str(helper), "--tray"],
+            [str(python), "-m", "treetask", "--tray"],
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
         )
     print("TreeTask panel icon enabled now and at login. Global shortcut: Super+Shift+T")
