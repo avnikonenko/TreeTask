@@ -32,13 +32,15 @@ def main():
             repo.complete("subtask", child, True)
             repo.save_task("Finish the reading notes", date(2026, 11, 1),
                            "Summarize the last chapter and keep three useful ideas.", "learning")
+            repo.save_task("Prepare Monday's priorities", date(2026, 11, 2),
+                           "Choose three tasks to focus on next week.", "work, planning")
             done = repo.save_task("Water the balcony plants", date(2026, 10, 29), tags="home")
             repo.complete("task", done, True)
             done = repo.save_task("Clear the inbox", date(2026, 10, 30), tags="work")
             repo.complete("task", done, True)
             window = MainWindow(repo)
             window.views.setCurrentRow(4)
-            window.resize(940, 580)
+            window.resize(1000, 620)
             for i in range(window.tree.topLevelItemCount()):
                 item = window.tree.topLevelItem(i)
                 if item.data(0, Qt.ItemDataRole.UserRole)[1] == first:
